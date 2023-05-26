@@ -1,7 +1,9 @@
-function spm12_segment_epi(mag_file)
+function [mask_file, mask] = spm12_mask(mag_file, thresh, fill_holes, conn)
 % Barbara Dymerska
-% UCL FIL Physics
-% wrapper for spm12 segment tool
+% brain extraction script using spm12 segment tool
+% it sums three probability maps from segment tool, thresholds the resulting map to obtain binary mask and fills residual holes
+% conn - used in imfill.m, connectivity of neighbouring voxels, choose one of the following:
+% 4, 6, 8, 18, 26
 
 tic
 %% calling SPM segment tool
@@ -44,6 +46,29 @@ matlabbatch{1}.spm.spatial.preproc.warp.write = [0 0];
 
 spm_jobman('serial',matlabbatch) ;
 
+%% summing up probability maps for GM, WM and CSF
+[path,mag_name,~] = fileparts(mag_file) ;
+mask_file = fullfile(path, 'mask.nii') ;
 
-disp(['spm segmenting took: ' secs2hms(toc)]);
+c1 = nifti(fullfile(path, sprintf('c1%s.nii', mag_name))) ;
+c2 = nifti(fullfile(path, sprintf('c2%s.nii', mag_name))) ;
+c3 = nifti(fullfile(path, sprintf('c3%s.nii', mag_name))) ;
+
+mask(:,:,:) = c1.dat(:,:,:) + c2.dat(:,:,:) + c3.dat(:,:,:) ;
+mask(mask>thresh) = 1 ;
+mask(mask<=thresh) = 0 ;
+
+if strcmp(fill_holes,'yes')
+    mask = imfill(mask,conn,'holes') ;
+end
+
+mask_obj = nifti(mag_file) ;
+mask_obj.dat.fname = fullfile(path, 'mask.nii');
+create(mask_obj)
+mask_obj.dat(:,:,:)=mask(:,:,:) ;
+createNifti(mask, mask_file, c1.mat) ;
+
+
+
+disp(['spm masking took: ' secs2hms(toc)]);
 
